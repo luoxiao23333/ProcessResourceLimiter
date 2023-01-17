@@ -4,6 +4,7 @@ import (
 	"GOProject/resources"
 	"GOProject/task"
 	"bytes"
+	"github.com/docker/go-units"
 	"log"
 	"os"
 	"os/exec"
@@ -70,7 +71,7 @@ func runTask(cpu uint64, mem int64) {
 		log.Println("From PID ", t.GetProcessID(), "task has been killed due to memory event")
 	})
 	exitChan := cmdTask.Run("test.py")
-	monitorChan := cmdTask.CreateResourcesMonitor()
+	monitorChan, _ := cmdTask.CreateResourcesMonitor(1 * time.Second)
 
 	for {
 		select {
@@ -78,7 +79,7 @@ func runTask(cpu uint64, mem int64) {
 			log.Printf("From PID %v, use CPU %v%%, Memory %v\n",
 				cmdTask.GetProcessID(),
 				metrics.CpuCoresPercentage,
-				metrics.MemoryBytes)
+				units.HumanSize(float64(metrics.MemoryBytes)))
 		case exitInfo := <-exitChan:
 			log.Printf("From PID %v, exited with Signal:{%v}, Code:{%v}, Output{%v}\n",
 				cmdTask.GetProcessID(),

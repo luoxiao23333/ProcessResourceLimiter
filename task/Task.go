@@ -26,6 +26,8 @@ type ExitStatus struct {
 	Code   int
 }
 
+// ExitInfo contains all info when a process exit
+// Output the std output of the process, which is redirected to the Output filed
 type ExitInfo struct {
 	ExitStatus
 	Output string
@@ -58,6 +60,7 @@ func NewCMDTask(command string, resourceLimit resources.Profile,
 	}
 }
 
+// Run the command line in a child process
 func (t *CMDTask) Run(args ...string) <-chan ExitInfo {
 	cmdOut := bytes.Buffer{}
 	cmd := exec.Command(t.command, args...)
@@ -112,15 +115,21 @@ func (t *CMDTask) Run(args ...string) <-chan ExitInfo {
 	return taskFinishChan
 }
 
-func (t *CMDTask) CreateResourcesMonitor() <-chan resources.Profile {
-	metricsChan := make(chan resources.Profile)
+// CreateResourcesMonitor
+// @param monitorDuration the duration of applying one monitor
+// @return metricsChan put metrics into it for each monitor
+// @return terminatedChan user put any bool info to terminate the monitor
+func (t *CMDTask) CreateResourcesMonitor(monitorDuration time.Duration) (
+	<-chan resources.Profile, chan<- bool) {
+	metricsChan := make(chan resources.Profile, 1)
+	terminatedChan := make(chan bool, 1)
 
 	go func() {
 		for {
 			select {
 			case _, _ = <-t.exitChan:
 				return
-			case <-time.After(1 * time.Second):
+			case <-time.After(monitorDuration):
 				stat, err := t.resourceManager.Stat()
 				if err != nil {
 					log.Panic("From PID ", t.GetProcessID(), " Resources Monitor Failed!")
@@ -132,13 +141,17 @@ func (t *CMDTask) CreateResourcesMonitor() <-chan resources.Profile {
 				}
 
 				metricsChan <- profile
+			case _, _ = <-terminatedChan:
+				return
 			}
 		}
 	}()
 
-	return metricsChan
+	return metricsChan, terminatedChan
 }
 
+// createResourceLimiter
+// apply resource limit to the process and create a cgroup manager
 func (t *CMDTask) createResourceLimiter() {
 	period := uint64(cgroupPeriod)
 	quota := int64(period * t.resourceLimit.CpuCoresPercentage / 100)
@@ -204,8 +217,4 @@ func getUniqueCGroupName() string {
 // Return -1 if process not start yet
 func (t *CMDTask) GetProcessID() int {
 	return t.pid
-}
-
-func (t *CMDTask) GetExitChan() <-chan bool {
-	return t.exitChan
 }
