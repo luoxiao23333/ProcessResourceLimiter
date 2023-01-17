@@ -1,10 +1,10 @@
 package main
 
 import (
-	"GOProject/resources"
-	"GOProject/task"
 	"bytes"
 	"github.com/docker/go-units"
+	"github.com/luoxiao23333/ProcessResourceLimiter/resources"
+	"github.com/luoxiao23333/ProcessResourceLimiter/task"
 	"log"
 	"os"
 	"os/exec"

@@ -1,7 +1,7 @@
 package task
 
 import (
-	"GOProject/resources"
+	"github.com/luoxiao23333/ProcessResourceLimiter/resources"
 )
 
 type Runner struct {

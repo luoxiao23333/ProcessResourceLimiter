@@ -1,10 +1,10 @@
 package task
 
 import (
-	"GOProject/resources"
 	"bytes"
 	"github.com/containerd/cgroups/v3/cgroup2"
 	"github.com/docker/go-units"
+	"github.com/luoxiao23333/ProcessResourceLimiter/resources"
 	"log"
 	"os"
 	"os/exec"
