@@ -1,4 +1,4 @@
-module GOProject
+module github.com/luoxiao23333/ProcessResourceLimiter
 
 go 1.19
 
