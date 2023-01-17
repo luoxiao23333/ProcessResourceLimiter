@@ -2,7 +2,10 @@ module GOProject
 
 go 1.19
 
-require github.com/containerd/cgroups/v3 v3.0.0-20230109201929-ed5fd67b28be
+require (
+	github.com/containerd/cgroups/v3 v3.0.0-20230109201929-ed5fd67b28be
+	github.com/docker/go-units v0.4.0
+)
 
 require (
 	github.com/cilium/ebpf v0.9.1 // indirect
