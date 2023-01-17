@@ -1,8 +1,8 @@
 package resources
 
 type Profile struct {
-	CpuCoresPercentage uint64
-	MemoryBytes        int64
+	CpuCoresPercentage uint64 `json:"cpu_cores_percentage"`
+	MemoryBytes        int64  `json:"memory_bytes"`
 }
 
 // NewResources

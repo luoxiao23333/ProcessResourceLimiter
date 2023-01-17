@@ -22,15 +22,15 @@ const cgroupPostfix string = ".slice" // must existing for valid unit name
 
 // ExitStatus return process info after the process exited or terminated
 type ExitStatus struct {
-	Signal os.Signal
-	Code   int
+	Signal os.Signal `json:"signal"`
+	Code   int       `json:"code"`
 }
 
 // ExitInfo contains all info when a process exit
 // Output the std output of the process, which is redirected to the Output filed
 type ExitInfo struct {
-	ExitStatus
-	Output string
+	ExitStatus `json:"exitStatus"`
+	Output     string `json:"output"`
 }
 
 type Task interface {

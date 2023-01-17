@@ -2,17 +2,22 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"github.com/docker/go-units"
 	"github.com/luoxiao23333/ProcessResourceLimiter/resources"
 	"github.com/luoxiao23333/ProcessResourceLimiter/task"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
+
+var metricsChanMap = make(map[uint64]resources.Profile)
+var httpPort = ":30000"
 
 func main() {
 	initLog()
@@ -20,22 +25,98 @@ func main() {
 	log.Println("Start Task Runner")
 	log.Println("CPU cores number is ", runtime.NumCPU(), getMemAvailable())
 
-	wg := sync.WaitGroup{}
-	wg.Add(2)
+	http.HandleFunc("/run_task", startTask)
+	http.HandleFunc("/metrics_query", metricsQuery)
+	err := http.ListenAndServe("localhost:8080", nil)
+	if err != nil {
+		log.Panic(err)
+	}
+
+}
+
+func startTask(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	command := query.Get("command")
+	cpu, err := strconv.Atoi(query.Get("cpu"))
+	if err != nil {
+		log.Panic(err)
+	}
+	mem, err := strconv.Atoi(query.Get("mem"))
+	if err != nil {
+		log.Panic(err)
+	}
+	cmdList := strings.Fields(command)
+
+	var resourcesLimit = resources.NewResources(uint64(cpu), int64(mem))
+	var cmdTask = task.NewCMDTask(cmdList[0], *resourcesLimit, func(t *task.CMDTask) {
+		log.Println("From PID ", t.GetProcessID(), "task has been killed due to memory event")
+	})
+	exitChan := cmdTask.Run(cmdList[1:]...)
+	monitorChan, _ := cmdTask.CreateResourcesMonitor(1 * time.Second)
+
+	taskId := GetUniqueNumber()
+	_, err = w.Write([]byte(strconv.Itoa(int(taskId))))
+	if err != nil {
+		log.Panic(err)
+	}
 
 	go func() {
-		runTask(200, 1024*1024*100)
-		wg.Done()
+		for {
+			select {
+			case metrics := <-monitorChan:
+				log.Printf("From PID %v, use CPU %v%%, Memory %v\n",
+					cmdTask.GetProcessID(),
+					metrics.CpuCoresPercentage,
+					units.HumanSize(float64(metrics.MemoryBytes)))
+				metricsChanMap[taskId] = metrics
+			case exitInfo := <-exitChan:
+				log.Printf("From PID %v, exited with Signal:{%v}, Code:{%v}, Output{%v}\n",
+					cmdTask.GetProcessID(),
+					exitInfo.Signal, exitInfo.Code, exitInfo.Output)
+				taskEnd(taskId, exitInfo)
+				return
+			}
+		}
 	}()
 
-	go func() {
-		runTask(100, 1024)
-		wg.Done()
-	}()
+}
 
-	time.Sleep(1 * time.Second)
+type TaskInfo struct {
+	TaskID   uint64        `json:"taskID"`
+	ExitInfo task.ExitInfo `json:"exitInfo"`
+}
 
-	wg.Wait()
+func taskEnd(taskID uint64, exitInfo task.ExitInfo) {
+	taskInfo := &TaskInfo{
+		TaskID:   taskID,
+		ExitInfo: exitInfo,
+	}
+
+	delete(metricsChanMap, taskID)
+
+	marshal, err := json.Marshal(taskInfo)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	_, err = http.DefaultClient.Post("http://localhost:8081", "application/json",
+		bytes.NewBuffer(marshal))
+	if err != nil {
+		log.Println(err)
+	}
+}
+
+func metricsQuery(w http.ResponseWriter, r *http.Request) {
+	taskID, _ := strconv.Atoi(r.URL.Query().Get("taskID"))
+	marshal, err := json.Marshal(metricsChanMap[uint64(taskID)])
+	if err != nil {
+		log.Panic(err)
+	}
+
+	_, err = w.Write(marshal)
+	if err != nil {
+		log.Panic(err)
+	}
 }
 
 func getMemAvailable() string {
@@ -88,4 +169,11 @@ func runTask(cpu uint64, mem int64) {
 		}
 	}
 
+}
+
+var uniqueNumber uint64 = 0
+
+func GetUniqueNumber() uint64 {
+	uniqueNumber += 1
+	return uniqueNumber
 }
