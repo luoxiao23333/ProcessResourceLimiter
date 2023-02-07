@@ -17,9 +17,11 @@ import (
 // Contains info of a task
 // TaskID unique ID in this node for the task
 // ExitInfo Exit code, signal and execution output of this task
+// StdOutput the standard output of the task. Like print(xxx)
 type TaskInfo struct {
-	TaskID   uint64        `json:"taskID"`
-	ExitInfo task.ExitInfo `json:"exitInfo"`
+	TaskID    uint64        `json:"taskID"`
+	ExitInfo  task.ExitInfo `json:"exitInfo"`
+	StdOutput string        `json:"stdOutput"`
 }
 
 // metricsMap map from taskID to its resources metrics result
@@ -85,7 +87,7 @@ func startTask(w http.ResponseWriter, r *http.Request) {
 				log.Printf("From PID %v, exited with Signal:{%v}, Code:{%v}, Output{%v}\n",
 					cmdTask.GetProcessID(),
 					exitInfo.Signal, exitInfo.Code, exitInfo.Output)
-				taskEnd(taskId, exitInfo)
+				taskEnd(taskId, exitInfo, exitInfo.Output)
 				return
 			}
 		}
@@ -102,10 +104,11 @@ func getUniqueNumber() uint64 {
 
 // taskEnd match "/task_end"
 // then a task done, send a http to the scheduler
-func taskEnd(taskID uint64, exitInfo task.ExitInfo) {
+func taskEnd(taskID uint64, exitInfo task.ExitInfo, taskOutput string) {
 	taskInfo := &TaskInfo{
-		TaskID:   taskID,
-		ExitInfo: exitInfo,
+		TaskID:    taskID,
+		ExitInfo:  exitInfo,
+		StdOutput: taskOutput,
 	}
 
 	delete(metricsMap, taskID)
