@@ -17,15 +17,13 @@ import (
 // Contains info of a task
 // TaskID unique ID in this node for the task
 // ExitInfo Exit code, signal and execution output of this task
-// StdOutput the standard output of the task. Like print(xxx)
 type TaskInfo struct {
-	TaskID    uint64        `json:"taskID"`
-	ExitInfo  task.ExitInfo `json:"exitInfo"`
-	StdOutput string        `json:"stdOutput"`
+	TaskID   int           `json:"taskID"`
+	ExitInfo task.ExitInfo `json:"exitInfo"`
 }
 
 // metricsMap map from taskID to its resources metrics result
-var metricsMap = make(map[uint64]resources.Profile)
+var metricsMap = make(map[int]resources.Profile)
 
 var schedulerURL = "http://localhost:8081"
 var resourceLimiterPort = ":8080"
@@ -33,10 +31,21 @@ var resourceLimiterPort = ":8080"
 var metricsSampleInterval = 1 * time.Second
 
 func RunHttpServer() {
+	registerToScheduler()
+
 	http.HandleFunc("/run_task", startTask)
 	http.HandleFunc("/metrics_query", metricsQuery)
 
 	err := http.ListenAndServe(resourceLimiterPort, nil)
+	if err != nil {
+		log.Panic(err)
+	}
+}
+
+// registerToScheduler register this worker node to the scheduler
+func registerToScheduler() {
+	_, err := http.DefaultClient.Post(schedulerURL, "application/json",
+		bytes.NewBuffer([]byte("Node Register Request")))
 	if err != nil {
 		log.Panic(err)
 	}
@@ -57,6 +66,10 @@ func startTask(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Panic(err)
 	}
+	taskId, err := strconv.Atoi(query.Get("id"))
+	if err != nil {
+		log.Panic(err)
+	}
 	cmdList := strings.Fields(command)
 
 	// create task with resource limit
@@ -67,8 +80,7 @@ func startTask(w http.ResponseWriter, r *http.Request) {
 	exitChan := cmdTask.Run(cmdList[1:]...)
 	monitorChan, _ := cmdTask.CreateResourcesMonitor(metricsSampleInterval)
 
-	taskId := getUniqueNumber()
-	_, err = w.Write([]byte(strconv.Itoa(int(taskId))))
+	_, err = w.Write([]byte(strconv.Itoa(taskId)))
 	if err != nil {
 		log.Panic(err)
 	}
@@ -87,7 +99,7 @@ func startTask(w http.ResponseWriter, r *http.Request) {
 				log.Printf("From PID %v, exited with Signal:{%v}, Code:{%v}, Output{%v}\n",
 					cmdTask.GetProcessID(),
 					exitInfo.Signal, exitInfo.Code, exitInfo.Output)
-				taskEnd(taskId, exitInfo, exitInfo.Output)
+				taskEnd(taskId, exitInfo)
 				return
 			}
 		}
@@ -95,20 +107,12 @@ func startTask(w http.ResponseWriter, r *http.Request) {
 
 }
 
-var uniqueNumber uint64 = 0
-
-func getUniqueNumber() uint64 {
-	uniqueNumber += 1
-	return uniqueNumber
-}
-
 // taskEnd match "/task_end"
 // then a task done, send a http to the scheduler
-func taskEnd(taskID uint64, exitInfo task.ExitInfo, taskOutput string) {
+func taskEnd(taskID int, exitInfo task.ExitInfo) {
 	taskInfo := &TaskInfo{
-		TaskID:    taskID,
-		ExitInfo:  exitInfo,
-		StdOutput: taskOutput,
+		TaskID:   taskID,
+		ExitInfo: exitInfo,
 	}
 
 	delete(metricsMap, taskID)
@@ -130,7 +134,7 @@ func taskEnd(taskID uint64, exitInfo task.ExitInfo, taskOutput string) {
 // Note: the metrics is sampled by the monitor per metricsSampleInterval
 func metricsQuery(w http.ResponseWriter, r *http.Request) {
 	taskID, _ := strconv.Atoi(r.URL.Query().Get("taskID"))
-	marshal, err := json.Marshal(metricsMap[uint64(taskID)])
+	marshal, err := json.Marshal(metricsMap[taskID])
 	if err != nil {
 		log.Panic(err)
 	}
