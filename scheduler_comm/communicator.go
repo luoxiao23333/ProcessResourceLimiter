@@ -44,7 +44,7 @@ func RunHttpServer() {
 
 // registerToScheduler register this worker node to the scheduler
 func registerToScheduler() {
-	_, err := http.DefaultClient.Post(schedulerURL, "application/json",
+	_, err := http.DefaultClient.Post(schedulerURL+"/worker_register", "application/json",
 		bytes.NewBuffer([]byte("Node Register Request")))
 	if err != nil {
 		log.Panic(err)

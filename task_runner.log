@@ -1,2 +1,2 @@
-2023/02/07 17:31:01 Start Task Runner
-2023/02/07 17:31:01 CPU cores number is  32 MemAvailable:   29339412 kB
+2023/02/09 13:35:26 Warning! This system is not running cgroups v2!
+Recommand Ubuntu 22.04+ with Linux kernal 5.8+

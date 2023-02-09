@@ -2,6 +2,7 @@ package task
 
 import (
 	"bytes"
+	"github.com/containerd/cgroups/v3"
 	"github.com/containerd/cgroups/v3/cgroup2"
 	"github.com/docker/go-units"
 	"github.com/luoxiao23333/ProcessResourceLimiter/resources"
@@ -167,6 +168,8 @@ func (t *CMDTask) createResourceLimiter() {
 	uniqueCGroupName := getUniqueCGroupName()
 
 	var err error
+	log.Printf("Create cgroup systemd, unit name: %v", uniqueCGroupName)
+
 	t.resourceManager, err = cgroup2.NewSystemd("/", uniqueCGroupName, -1, &cgroupResourceLimit)
 	if err != nil {
 		err := t.resourceManager.DeleteSystemd()
@@ -217,4 +220,8 @@ func getUniqueCGroupName() string {
 // Return -1 if process not start yet
 func (t *CMDTask) GetProcessID() int {
 	return t.pid
+}
+
+func IsRunCgroupV2() bool {
+	return cgroups.Mode() == cgroups.Unified
 }

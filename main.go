@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"github.com/luoxiao23333/ProcessResourceLimiter/scheduler_comm"
+	"github.com/luoxiao23333/ProcessResourceLimiter/task"
 	"log"
 	"os"
 	"os/exec"
@@ -17,6 +18,11 @@ const (
 
 func main() {
 	initLog()
+
+	if task.IsRunCgroupV2() == false {
+		log.Panic("Warning! This system is not running cgroups v2!\n" +
+			"Recommand Ubuntu 22.04+ with Linux kernal 5.8+")
+	}
 
 	log.Println("Start Task Runner")
 	log.Println("CPU cores number is ", runtime.NumCPU(), getMemAvailable())
