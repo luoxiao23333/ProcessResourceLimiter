@@ -1,2 +1,32 @@
-2023/02/09 13:35:26 Warning! This system is not running cgroups v2!
-Recommand Ubuntu 22.04+ with Linux kernal 5.8+
+2023/02/09 18:43:03 Start Task Runner
+2023/02/09 18:43:03 CPU cores number is  32 MemAvailable:   31187580 kB
+2023/02/09 18:43:06 receive task: {50 10000000 python test.py 1}
+2023/02/09 18:43:06 Create cgroup systemd, unit name: TaskRunner1.slice
+2023/02/09 18:43:06 From PID 402193 Resource Limit Applied: {CPU: 50% Memory: 10MB}
+2023/02/09 18:43:06 From PID 402193, run command {python test.py}
+2023/02/09 18:43:07 From PID 402193, use CPU 52%, Memory 0B
+2023/02/09 18:43:08 From PID 402193, exited with signal: signal -1, exit code: 0
+2023/02/09 18:43:08 From PID 402193, exited with Signal:{signal -1}, Code:{0}, Output{2010740.6030786417
+}
+2023/02/09 18:43:30 receive task: {50 10000000 python test.py 2}
+2023/02/09 18:43:30 Create cgroup systemd, unit name: TaskRunner2.slice
+2023/02/09 18:43:30 From PID 402912 Resource Limit Applied: {CPU: 50% Memory: 10MB}
+2023/02/09 18:43:30 From PID 402912, run command {python test.py}
+2023/02/09 18:43:31 From PID 402912, use CPU 49%, Memory 0B
+2023/02/09 18:43:32 From PID 402912, use CPU 49%, Memory 0B
+2023/02/09 18:43:32 From PID 402912, exited with signal: signal -1, exit code: 0
+2023/02/09 18:43:32 From PID 402912, exited with Signal:{signal -1}, Code:{0}, Output{2855553.41382609
+}
+2023/02/09 18:43:39 receive task: {50 10000000 python test.py 3}
+2023/02/09 18:43:39 Create cgroup systemd, unit name: TaskRunner3.slice
+2023/02/09 18:43:39 From PID 403177 Resource Limit Applied: {CPU: 50% Memory: 10MB}
+2023/02/09 18:43:39 From PID 403177, run command {python test.py}
+2023/02/09 18:43:40 From PID 403177, use CPU 51%, Memory 0B
+2023/02/09 18:43:41 From PID 403177, use CPU 50%, Memory 0B
+2023/02/09 18:43:42 From PID 403177, use CPU 50%, Memory 0B
+2023/02/09 18:43:43 From PID 403177, use CPU 50%, Memory 0B
+2023/02/09 18:43:44 From PID 403177, use CPU 50%, Memory 0B
+2023/02/09 18:43:45 From PID 403177, use CPU 50%, Memory 0B
+2023/02/09 18:43:45 From PID 403177, exited with signal: signal -1, exit code: 0
+2023/02/09 18:43:45 From PID 403177, exited with Signal:{signal -1}, Code:{0}, Output{7142080.56144959
+}

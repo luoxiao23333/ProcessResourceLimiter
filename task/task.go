@@ -17,7 +17,7 @@ import (
 
 var taskCount uint64 = 0
 
-const cgroupPrefix string = "Task_Runner"
+const cgroupPrefix string = "TaskRunner"
 const cgroupPeriod = 100000
 const cgroupPostfix string = ".slice" // must existing for valid unit name
 

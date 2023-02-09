@@ -6,12 +6,22 @@ import (
 	"github.com/docker/go-units"
 	"github.com/luoxiao23333/ProcessResourceLimiter/resources"
 	"github.com/luoxiao23333/ProcessResourceLimiter/task"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// TaskSubmissionInfo
+// This object represent a new task
+type TaskSubmissionInfo struct {
+	CPU     int    `json:"cpu"`
+	Mem     int    `json:"mem"`
+	Command string `json:"command"`
+	ID      int    `json:"id"`
+}
 
 // TaskInfo
 // Contains info of a task
@@ -56,31 +66,29 @@ func registerToScheduler() {
 // TODO update Get to Post with json struct
 func startTask(w http.ResponseWriter, r *http.Request) {
 	// Parse http query and command
-	query := r.URL.Query()
-	command := query.Get("command")
-	cpu, err := strconv.Atoi(query.Get("cpu"))
+	rawData, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Panic(err)
 	}
-	mem, err := strconv.Atoi(query.Get("mem"))
+
+	var taskInfo TaskSubmissionInfo
+	err = json.Unmarshal(rawData, &taskInfo)
 	if err != nil {
 		log.Panic(err)
 	}
-	taskId, err := strconv.Atoi(query.Get("id"))
-	if err != nil {
-		log.Panic(err)
-	}
-	cmdList := strings.Fields(command)
+
+	log.Printf("receive task: %v", taskInfo)
+	cmdList := strings.Fields(taskInfo.Command)
 
 	// create task with resource limit
-	var resourcesLimit = resources.NewResources(uint64(cpu), int64(mem))
+	var resourcesLimit = resources.NewResources(uint64(taskInfo.CPU), int64(taskInfo.Mem))
 	var cmdTask = task.NewCMDTask(cmdList[0], *resourcesLimit, func(t *task.CMDTask) {
 		log.Println("From PID ", t.GetProcessID(), "task has been killed due to memory event")
 	})
 	exitChan := cmdTask.Run(cmdList[1:]...)
 	monitorChan, _ := cmdTask.CreateResourcesMonitor(metricsSampleInterval)
 
-	_, err = w.Write([]byte(strconv.Itoa(taskId)))
+	_, err = w.Write([]byte(strconv.Itoa(taskInfo.ID)))
 	if err != nil {
 		log.Panic(err)
 	}
@@ -94,12 +102,12 @@ func startTask(w http.ResponseWriter, r *http.Request) {
 					cmdTask.GetProcessID(),
 					metrics.CpuCoresPercentage,
 					units.HumanSize(float64(metrics.MemoryBytes)))
-				metricsMap[taskId] = metrics
+				metricsMap[taskInfo.ID] = metrics
 			case exitInfo := <-exitChan:
 				log.Printf("From PID %v, exited with Signal:{%v}, Code:{%v}, Output{%v}\n",
 					cmdTask.GetProcessID(),
 					exitInfo.Signal, exitInfo.Code, exitInfo.Output)
-				taskEnd(taskId, exitInfo)
+				taskEnd(taskInfo.ID, exitInfo)
 				return
 			}
 		}
