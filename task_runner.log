@@ -1,11 +1,2 @@
-2023/02/13 13:55:06 Start Task Runner
-2023/02/13 13:55:06 CPU cores number is  32 MemAvailable:   31065252 kB
-2023/02/13 13:55:14 receive task: {python test.py 2}
-2023/02/13 13:55:14 From PID 2743186, run command {python test.py}
-2023/02/13 13:55:17 From PID 2743186, exited with signal: signal -1, exit code: 0
-2023/02/13 13:55:38 receive task: {python test.py 3}
-2023/02/13 13:55:38 From PID 2743842, run command {python test.py}
-2023/02/13 13:55:39 From PID 2743842, exited with signal: signal -1, exit code: 0
-2023/02/13 13:55:47 receive task: {python test.py 4}
-2023/02/13 13:55:47 From PID 2744104, run command {python test.py}
-2023/02/13 13:55:48 From PID 2744104, exited with signal: signal -1, exit code: 0
+2023/02/13 14:03:55 Start Task Runner
+2023/02/13 14:03:55 CPU cores number is  32 MemAvailable:   31033840 kB
