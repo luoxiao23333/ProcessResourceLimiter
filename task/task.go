@@ -2,20 +2,13 @@ package task
 
 import (
 	"bytes"
-	"github.com/containerd/cgroups/v3"
-	"github.com/containerd/cgroups/v3/cgroup2"
-	"github.com/docker/go-units"
-	"github.com/luoxiao23333/ProcessResourceLimiter/resources"
 	"log"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
 )
-
-var taskCount uint64 = 0
 
 const cgroupPrefix string = "TaskRunner"
 const cgroupPeriod = 100000
@@ -42,22 +35,17 @@ type Task interface {
 type CMDTask struct {
 	command           string
 	pid               int
-	resourceLimit     resources.Profile
 	memoryEventHandle func(t *CMDTask)
 
-	resourceManager *cgroup2.Manager
-	exitChan        chan bool
-	procStartTime   time.Time
+	exitChan      chan bool
+	procStartTime time.Time
 }
 
-func NewCMDTask(command string, resourceLimit resources.Profile,
-	memoryEventHandle func(t *CMDTask)) *CMDTask {
+func NewCMDTask(command string) *CMDTask {
 	return &CMDTask{
-		command:           command,
-		pid:               -1,
-		resourceLimit:     resourceLimit,
-		memoryEventHandle: memoryEventHandle,
-		exitChan:          make(chan bool, 1),
+		command:       command,
+		pid:           -1,
+		exitChan:      make(chan bool, 1),
 	}
 }
 
@@ -73,7 +61,6 @@ func (t *CMDTask) Run(args ...string) <-chan ExitInfo {
 
 	t.pid = cmd.Process.Pid
 	t.procStartTime = time.Now()
-	t.createResourceLimiter()
 
 	log.Printf("From PID %v, run command {%v}",
 		t.pid,
@@ -93,19 +80,10 @@ func (t *CMDTask) Run(args ...string) <-chan ExitInfo {
 			Signal: status.Signal(),
 		}
 
-		if exitStatus.Signal == syscall.SIGKILL {
-			t.handleEvent()
-		} else {
-			log.Printf("From PID %v, exited with signal: %v, exit code: %v",
-				t.GetProcessID(),
-				exitStatus.Signal,
-				exitStatus.Code)
-		}
-
-		err := t.resourceManager.DeleteSystemd()
-		if err != nil {
-			log.Panic(err)
-		}
+		log.Printf("From PID %v, exited with signal: %v, exit code: %v",
+			t.GetProcessID(),
+			exitStatus.Signal,
+			exitStatus.Code)
 
 		taskFinishChan <- ExitInfo{
 			ExitStatus: exitStatus,
@@ -116,112 +94,9 @@ func (t *CMDTask) Run(args ...string) <-chan ExitInfo {
 	return taskFinishChan
 }
 
-// CreateResourcesMonitor
-// @param monitorDuration the duration of applying one monitor
-// @return metricsChan put metrics into it for each monitor
-// @return terminatedChan user put any bool info to terminate the monitor
-func (t *CMDTask) CreateResourcesMonitor(monitorDuration time.Duration) (
-	<-chan resources.Profile, chan<- bool) {
-	metricsChan := make(chan resources.Profile, 1)
-	terminatedChan := make(chan bool, 1)
-
-	go func() {
-		for {
-			select {
-			case _, _ = <-t.exitChan:
-				return
-			case <-time.After(monitorDuration):
-				stat, err := t.resourceManager.Stat()
-				if err != nil {
-					log.Panic("From PID ", t.GetProcessID(), " Resources Monitor Failed!")
-				}
-
-				profile := resources.Profile{
-					CpuCoresPercentage: stat.CPU.UserUsec * 100 / uint64(time.Since(t.procStartTime).Microseconds()),
-					MemoryBytes:        int64(stat.Memory.Usage),
-				}
-
-				metricsChan <- profile
-			case _, _ = <-terminatedChan:
-				return
-			}
-		}
-	}()
-
-	return metricsChan, terminatedChan
-}
-
-// createResourceLimiter
-// apply resource limit to the process and create a cgroup manager
-func (t *CMDTask) createResourceLimiter() {
-	period := uint64(cgroupPeriod)
-	quota := int64(period * t.resourceLimit.CpuCoresPercentage / 100)
-	cgroupResourceLimit := cgroup2.Resources{
-		CPU: &cgroup2.CPU{
-			Max: cgroup2.NewCPUMax(&quota, &period),
-		},
-		Memory: &cgroup2.Memory{
-			Max: &(t.resourceLimit.MemoryBytes),
-		},
-	}
-
-	uniqueCGroupName := getUniqueCGroupName()
-
-	var err error
-	log.Printf("Create cgroup systemd, unit name: %v", uniqueCGroupName)
-
-	t.resourceManager, err = cgroup2.NewSystemd("/", uniqueCGroupName, -1, &cgroupResourceLimit)
-	if err != nil {
-		err := t.resourceManager.DeleteSystemd()
-		if err != nil {
-			log.Panic(err)
-		}
-		log.Panic(err)
-	}
-
-	err = t.resourceManager.AddProc(uint64(t.GetProcessID()))
-	if err != nil {
-		log.Panic(err)
-	}
-
-	log.Printf("From PID %v Resource Limit Applied: {CPU: %v%% Memory: %v}\n",
-		t.GetProcessID(),
-		t.resourceLimit.CpuCoresPercentage,
-		units.HumanSize(float64(t.resourceLimit.MemoryBytes)))
-}
-
-// handleEvent to handle memory event, especially memory limit exceeded
-func (t *CMDTask) handleEvent() {
-	eventChan, errorChan := t.resourceManager.EventChan()
-	for {
-		select {
-		case event, _ := <-eventChan:
-			log.Println("From PID ", t.GetProcessID(),
-				"memory may exceed limitation, memory event: ", event)
-			t.memoryEventHandle(t)
-			return
-		case err, _ := <-errorChan:
-			log.Println("From PID ", t.GetProcessID(), " memory event error:", err)
-			return
-		case <-time.After(1 * time.Second):
-			log.Println("From PID ", t.GetProcessID(), " Process Killed -- Unknown")
-			return
-		}
-	}
-}
-
-// getUniqueCGroupName create unique cgroup for each process
-func getUniqueCGroupName() string {
-	taskCount += 1
-	return cgroupPrefix + strconv.FormatUint(taskCount, 10) + cgroupPostfix
-}
-
 // GetProcessID
 // Return -1 if process not start yet
 func (t *CMDTask) GetProcessID() int {
 	return t.pid
 }
 
-func IsRunCgroupV2() bool {
-	return cgroups.Mode() == cgroups.Unified
-}
