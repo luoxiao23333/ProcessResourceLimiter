@@ -35,7 +35,7 @@ type TaskInfo struct {
 // metricsMap map from taskID to its resources metrics result
 var metricsMap = make(map[int]resources.Profile)
 
-var schedulerURL = "http://localhost:8081"
+var schedulerURL = "http://192.168.0.101:8081"
 var resourceLimiterPort = ":8080"
 
 var metricsSampleInterval = 1 * time.Second
