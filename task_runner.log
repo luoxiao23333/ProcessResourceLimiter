@@ -1,3 +1,5 @@
-2023/02/17 09:21:06 Start Task Runner
-2023/02/17 09:21:06 CPU cores number is  32 MemAvailable:   30353920 kB
-2023/02/17 09:21:06 Post "http://controller:8081/worker_register": dial tcp 192.168.1.101:8081: connect: connection refused
+2023/02/18 12:35:48 Start Task Runner
+2023/02/18 12:35:48 CPU cores number is  32 MemAvailable:   30222232 kB
+2023/02/18 12:35:50 receive task: {python3 test.py 1}
+2023/02/18 12:35:50 From PID 2259058, run command {python3 test.py}
+2023/02/18 12:35:52 From PID 2259058, exited with signal: signal -1, exit code: 0

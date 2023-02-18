@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 )
@@ -26,7 +25,6 @@ type TaskSubmissionInfo struct {
 type TaskInfo struct {
 	TaskID   int           `json:"taskID"`
 	ExitInfo task.ExitInfo `json:"exitInfo"`
-	Hostname string        `json:"hostname"`
 }
 
 var schedulerURL = "http://192.168.1.101:8081"
@@ -91,15 +89,9 @@ func startTask(w http.ResponseWriter, r *http.Request) {
 // taskEnd match "/task_end"
 // then a task done, send a http to the scheduler
 func taskEnd(taskID int, exitInfo task.ExitInfo) {
-	hostname, err := os.Hostname()
-	if err != nil {
-		log.Panic(err)
-	}
-
 	taskInfo := &TaskInfo{
 		TaskID:   taskID,
 		ExitInfo: exitInfo,
-		Hostname: hostname,
 	}
 
 	marshal, err := json.Marshal(taskInfo)
