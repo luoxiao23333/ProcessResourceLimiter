@@ -27,7 +27,7 @@ type TaskInfo struct {
 	ExitInfo task.ExitInfo `json:"exitInfo"`
 }
 
-var schedulerURL = "http://controller:8081"
+var schedulerURL = "http://192.168.1.101:8081"
 var resourceLimiterPort = ":8080"
 
 func RunHttpServer() {
