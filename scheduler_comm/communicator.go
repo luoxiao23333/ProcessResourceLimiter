@@ -6,16 +6,18 @@ import (
 	"github.com/luoxiao23333/ProcessResourceLimiter/task"
 	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
-	"strconv"
+	"os"
 	"strings"
+	"sync"
 )
 
 // TaskSubmissionInfo
 // This object represent a new task
 type TaskSubmissionInfo struct {
-	Command string `json:"command"`
-	ID      int    `json:"id"`
+	ID   int    `json:"id"`
+	Task string `json:"task"`
 }
 
 // TaskInfo
@@ -29,6 +31,8 @@ type TaskInfo struct {
 
 var schedulerURL = "http://192.168.1.101:8081"
 var resourceLimiterPort = ":8080"
+
+var dataMap sync.Map
 
 func RunHttpServer() {
 	registerToScheduler()
@@ -55,53 +59,96 @@ func registerToScheduler() {
 // TODO update Get to Post with json struct
 func startTask(w http.ResponseWriter, r *http.Request) {
 	// Parse http query and command
-	rawData, err := io.ReadAll(r.Body)
+	reader, err := r.MultipartReader()
+	if err != nil {
+		log.Panic(err)
+	}
+
+	form, err := reader.ReadForm(1024 * 1024 * 100)
 	if err != nil {
 		log.Panic(err)
 	}
 
 	var taskInfo TaskSubmissionInfo
-	err = json.Unmarshal(rawData, &taskInfo)
+	err = json.Unmarshal([]byte(form.Value["json"][0]), &taskInfo)
 	if err != nil {
 		log.Panic(err)
 	}
 
+	var body []byte
+
 	log.Printf("receive task: %v", taskInfo)
-	cmdList := strings.Fields(taskInfo.Command)
 
-	var cmdTask = task.NewCMDTask(cmdList[0])
-	exitChan := cmdTask.Run(cmdList[1:]...)
+	if taskInfo.Task == "object_detection" {
+		objectDetection(form, taskInfo)
 
-	go func() {
-		select {
-		case exitInfo := <-exitChan:
-			taskEnd(taskInfo.ID, exitInfo)
-		}
-	}()
+	} else {
+		log.Panic("Unsupported Task")
+	}
 
-	_, err = w.Write([]byte(strconv.Itoa(taskInfo.ID)))
+	_, err = w.Write(body)
 	if err != nil {
 		log.Panic(err)
 	}
 
 }
 
-// taskEnd match "/task_end"
-// then a task done, send a http to the scheduler
-func taskEnd(taskID int, exitInfo task.ExitInfo) {
-	taskInfo := &TaskInfo{
-		TaskID:   taskID,
-		ExitInfo: exitInfo,
+func objectDetection(form *multipart.Form, taskInfo TaskSubmissionInfo) {
+	writeFile(form, taskInfo.ID)
+	cmdTask := task.NewCMDTask("python3")
+	// TODO args...
+	args := []string{""}
+	exitChan := cmdTask.Run(args...)
+	select {
+	case exitInfo := <-exitChan:
+		// bounding box's xy and ith frame of detected
+		outputParams := strings.Fields(exitInfo.Output)
+		x := outputParams[0]
+		y := outputParams[1]
+		frame := outputParams[2]
+		body, err := json.Marshal(taskInfo)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		go func() {
+			http.Post(schedulerURL + "/new_task")
+		}()
+	}
+}
+
+// get tracking worker url from scheduler
+// upload file to worker
+func sendTrackingRequest() {
+
+}
+
+func writeFile(form *multipart.Form, taskID int) {
+	file, err := form.File["video"][0].Open()
+	if err != nil {
+		return
+	}
+	defer func(file multipart.File) {
+		err := file.Close()
+		if err != nil {
+
+		}
+	}(file)
+
+	err = os.Remove("input.avi")
+	if err != nil {
+		log.Println(err)
 	}
 
-	marshal, err := json.Marshal(taskInfo)
+	create, err := os.Create("input.avi")
 	if err != nil {
 		log.Panic(err)
 	}
 
-	_, err = http.DefaultClient.Post(schedulerURL+"/task_end", "application/json",
-		bytes.NewBuffer(marshal))
+	_, err = io.Copy(create, file)
 	if err != nil {
-		log.Println(err)
+		log.Panic(err)
 	}
+
+	log.Println("Task id ", taskID, " Write file ", "input.avi")
 }
