@@ -4,13 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"github.com/luoxiao23333/ProcessResourceLimiter/task"
+	"github.com/luoxiao23333/ProcessResourceLimiter/utils"
 	"io"
 	"log"
-	"mime/multipart"
 	"net/http"
 	"os"
-	"strings"
-	"sync"
 )
 
 // TaskSubmissionInfo
@@ -32,12 +30,15 @@ type TaskInfo struct {
 var schedulerURL = "http://192.168.1.101:8081"
 var resourceLimiterPort = ":8080"
 
-var dataMap sync.Map
+var zipPath = "temp.zip"
+
+var waitingTrackingImages chan bool
 
 func RunHttpServer() {
 	registerToScheduler()
 
 	http.HandleFunc("/run_task", startTask)
+	http.HandleFunc("tracking_upload", trackingUpload)
 
 	err := http.ListenAndServe(resourceLimiterPort, nil)
 	if err != nil {
@@ -80,8 +81,46 @@ func startTask(w http.ResponseWriter, r *http.Request) {
 	log.Printf("receive task: %v", taskInfo)
 
 	if taskInfo.Task == "object_detection" {
-		objectDetection(form, taskInfo)
+		// Complete object detection
+		obTask := task.NewObjectDetectionTask()
+		imgRoad, info := obTask.BlockedRun(form)
 
+		// After detection, get tracking input, notify the scheduler
+		resp, err := http.Post(schedulerURL, "text/plain", bytes.NewBuffer([]byte(info)))
+		if err != nil {
+			log.Panic(err)
+		}
+
+		// Get tracking worker url, send images to the tracker
+		trackingUrl, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		utils.Zip(imgRoad, zipPath)
+		file, err := os.ReadFile(zipPath)
+		if err != nil {
+			log.Panic(err)
+		}
+		_, err = http.Post(string(trackingUrl),
+			"application/octet-stream", bytes.NewReader(file))
+		if err != nil {
+			log.Panic(err)
+		}
+
+		// TODO
+		// After object detection, send what to the scheduler
+		// May can tell scheduler that how many tracking subtask it has
+
+	} else if taskInfo.Task == "tracking" {
+		trackingTask := task.NewTrackingTask()
+
+		// wait for object detection worker upload images
+		waitingTrackingImages = make(chan bool)
+		_ = <-waitingTrackingImages
+		imageRoad, trackingInfo := trackingTask.BlockedRun(form.Value["pythonInfo"][0])
+		// TODO
+		// After tracking, send what to the scheduler
 	} else {
 		log.Panic("Unsupported Task")
 	}
@@ -93,62 +132,19 @@ func startTask(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func objectDetection(form *multipart.Form, taskInfo TaskSubmissionInfo) {
-	writeFile(form, taskInfo.ID)
-	cmdTask := task.NewCMDTask("python3")
-	// TODO args...
-	args := []string{""}
-	exitChan := cmdTask.Run(args...)
-	select {
-	case exitInfo := <-exitChan:
-		// bounding box's xy and ith frame of detected
-		outputParams := strings.Fields(exitInfo.Output)
-		x := outputParams[0]
-		y := outputParams[1]
-		frame := outputParams[2]
-		body, err := json.Marshal(taskInfo)
-		if err != nil {
-			log.Panic(err)
-		}
-
-		go func() {
-			http.Post(schedulerURL + "/new_task")
-		}()
-	}
-}
-
-// get tracking worker url from scheduler
-// upload file to worker
-func sendTrackingRequest() {
-
-}
-
-func writeFile(form *multipart.Form, taskID int) {
-	file, err := form.File["video"][0].Open()
-	if err != nil {
-		return
-	}
-	defer func(file multipart.File) {
-		err := file.Close()
-		if err != nil {
-
-		}
-	}(file)
-
-	err = os.Remove("input.avi")
-	if err != nil {
-		log.Println(err)
-	}
-
-	create, err := os.Create("input.avi")
+func trackingUpload(w http.ResponseWriter, r *http.Request) {
+	// receive images from object detection, unzip and notify tracking task to start
+	create, err := os.Create(zipPath)
 	if err != nil {
 		log.Panic(err)
 	}
 
-	_, err = io.Copy(create, file)
+	_, err = io.Copy(create, r.Body)
 	if err != nil {
 		log.Panic(err)
 	}
 
-	log.Println("Task id ", taskID, " Write file ", "input.avi")
+	utils.UnZIP(zipPath, "input")
+
+	waitingTrackingImages <- true
 }

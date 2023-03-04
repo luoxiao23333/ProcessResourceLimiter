@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"strings"
 	"syscall"
-	"time"
 )
 
 const cgroupPrefix string = "TaskRunner"
@@ -33,19 +32,17 @@ type Task interface {
 }
 
 type CMDTask struct {
-	command           string
-	pid               int
-	memoryEventHandle func(t *CMDTask)
+	command string
+	pid     int
 
-	exitChan      chan bool
-	procStartTime time.Time
+	exitChan chan bool
 }
 
 func NewCMDTask(command string) *CMDTask {
 	return &CMDTask{
-		command:       command,
-		pid:           -1,
-		exitChan:      make(chan bool, 1),
+		command:  command,
+		pid:      -1,
+		exitChan: make(chan bool, 1),
 	}
 }
 
@@ -60,7 +57,6 @@ func (t *CMDTask) Run(args ...string) <-chan ExitInfo {
 	}
 
 	t.pid = cmd.Process.Pid
-	t.procStartTime = time.Now()
 
 	log.Printf("From PID %v, run command {%v}",
 		t.pid,
@@ -99,4 +95,3 @@ func (t *CMDTask) Run(args ...string) <-chan ExitInfo {
 func (t *CMDTask) GetProcessID() int {
 	return t.pid
 }
-
