@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"github.com/luoxiao23333/ProcessResourceLimiter/task"
-	"github.com/luoxiao23333/ProcessResourceLimiter/utils"
 	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"os"
 )
@@ -38,7 +38,6 @@ func RunHttpServer() {
 	registerToScheduler()
 
 	http.HandleFunc("/run_task", startTask)
-	http.HandleFunc("tracking_upload", trackingUpload)
 
 	err := http.ListenAndServe(resourceLimiterPort, nil)
 	if err != nil {
@@ -85,42 +84,19 @@ func startTask(w http.ResponseWriter, r *http.Request) {
 		obTask := task.NewObjectDetectionTask()
 		imgRoad, info := obTask.BlockedRun(form)
 
-		// After detection, get tracking input, notify the scheduler
-		resp, err := http.Post(schedulerURL, "text/plain", bytes.NewBuffer([]byte(info)))
+		multipartWriter := multipart.NewWriter(w)
+		addFileToMultipart(imgRoad+"/output.mp4",
+			"video", "output.mp4", multipartWriter)
+		addFileToMultipart(imgRoad + "/output.txt",
+			"bbox_txt", "output.txt", multipartWriter)
+		addFileToMultipart(imgRoad + "/output.xlsx",
+			"bbox_xlsx", "output.xlsx", multipartWriter)
+
+		err = multipartWriter.WriteField("container_output", info)
 		if err != nil {
 			log.Panic(err)
 		}
 
-		// Get tracking worker url, send images to the tracker
-		trackingUrl, err := io.ReadAll(resp.Body)
-		if err != nil {
-			log.Panic(err)
-		}
-
-		utils.Zip(imgRoad, zipPath)
-		file, err := os.ReadFile(zipPath)
-		if err != nil {
-			log.Panic(err)
-		}
-		_, err = http.Post(string(trackingUrl),
-			"application/octet-stream", bytes.NewReader(file))
-		if err != nil {
-			log.Panic(err)
-		}
-
-		// TODO
-		// After object detection, send what to the scheduler
-		// May can tell scheduler that how many tracking subtask it has
-
-	} else if taskInfo.Task == "tracking" {
-		trackingTask := task.NewTrackingTask()
-
-		// wait for object detection worker upload images
-		waitingTrackingImages = make(chan bool)
-		_ = <-waitingTrackingImages
-		imageRoad, trackingInfo := trackingTask.BlockedRun(form.Value["pythonInfo"][0])
-		// TODO
-		// After tracking, send what to the scheduler
 	} else {
 		log.Panic("Unsupported Task")
 	}
@@ -132,19 +108,14 @@ func startTask(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func trackingUpload(w http.ResponseWriter, r *http.Request) {
-	// receive images from object detection, unzip and notify tracking task to start
-	create, err := os.Create(zipPath)
+func addFileToMultipart(filePath, fieldName, fileName string, multipartWriter *multipart.Writer) {
+	file, err := os.Open(filePath)
 	if err != nil {
 		log.Panic(err)
 	}
-
-	_, err = io.Copy(create, r.Body)
+	writer, err := multipartWriter.CreateFormFile(fieldName, fileName)
+	_, err = io.Copy(writer, file)
 	if err != nil {
 		log.Panic(err)
 	}
-
-	utils.UnZIP(zipPath, "input")
-
-	waitingTrackingImages <- true
 }

@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	objectDetectionCMD        = ""
-	objectDetectionArgs       = []string{""}
+	objectDetectionCMD        = "bash"
+	objectDetectionArgs       = []string{"run.sh"}
 	objectDetectionImagesRoad = "output/"
 )
 
@@ -48,11 +48,6 @@ func writeFile(form *multipart.Form) {
 
 		}
 	}(file)
-
-	err = os.Remove("input.avi")
-	if err != nil {
-		log.Println(err)
-	}
 
 	create, err := os.Create("input.avi")
 	if err != nil {
