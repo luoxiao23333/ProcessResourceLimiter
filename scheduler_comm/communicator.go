@@ -2,7 +2,6 @@ package scheduler_comm
 
 import (
 	"bytes"
-	"encoding/json"
 	"github.com/luoxiao23333/ProcessResourceLimiter/task"
 	"io"
 	"log"
@@ -10,13 +9,6 @@ import (
 	"net/http"
 	"os"
 )
-
-// TaskSubmissionInfo
-// This object represent a new task
-type TaskSubmissionInfo struct {
-	ID   int    `json:"id"`
-	Task string `json:"task"`
-}
 
 // TaskInfo
 // Contains info of a task
@@ -69,43 +61,54 @@ func startTask(w http.ResponseWriter, r *http.Request) {
 		log.Panic(err)
 	}
 
-	var taskInfo TaskSubmissionInfo
-	err = json.Unmarshal([]byte(form.Value["json"][0]), &taskInfo)
-	if err != nil {
-		log.Panic(err)
-	}
+	taskName := form.Value["task_name"][0]
+	taskID := form.Value["task_id"][0]
 
-	var body []byte
+	log.Printf("receive task: %v, id: %v", taskName, taskID)
 
-	log.Printf("receive task: %v", taskInfo)
+	if taskName == "object_detection" {
+		go func() {
+			// Complete object detection
+			obTask := task.NewObjectDetectionTask()
+			imgRoad, info := obTask.BlockedRun(form)
 
-	if taskInfo.Task == "object_detection" {
-		// Complete object detection
-		obTask := task.NewObjectDetectionTask()
-		imgRoad, info := obTask.BlockedRun(form)
+			body := &bytes.Buffer{}
+			multipartWriter := multipart.NewWriter(body)
+			addFileToMultipart(imgRoad+"/output.mp4",
+				"video", "output.mp4", multipartWriter)
+			addFileToMultipart(imgRoad+"/output.txt",
+				"bbox_txt", "output.txt", multipartWriter)
+			addFileToMultipart(imgRoad+"/output.xlsx",
+				"bbox_xlsx", "output.xlsx", multipartWriter)
 
-		multipartWriter := multipart.NewWriter(w)
-		addFileToMultipart(imgRoad+"/output.mp4",
-			"video", "output.mp4", multipartWriter)
-		addFileToMultipart(imgRoad + "/output.txt",
-			"bbox_txt", "output.txt", multipartWriter)
-		addFileToMultipart(imgRoad + "/output.xlsx",
-			"bbox_xlsx", "output.xlsx", multipartWriter)
+			err = multipartWriter.WriteField("container_output", info)
+			if err != nil {
+				log.Panic(err)
+			}
 
-		err = multipartWriter.WriteField("container_output", info)
+			err = multipartWriter.WriteField("task_id", taskID)
+			if err != nil {
+				log.Panic(err)
+			}
+
+			err = multipartWriter.Close()
+			if err != nil {
+				log.Panic(err)
+			}
+
+			_, err = http.Post(schedulerURL + "/object_detection_finish", multipartWriter.FormDataContentType(), body)
+			if err != nil {
+				log.Panic(err)
+			}
+
+		}()
+	} else {
+		_, err = w.Write([]byte("Unsupported Task"))
 		if err != nil {
 			log.Panic(err)
 		}
-
-	} else {
 		log.Panic("Unsupported Task")
 	}
-
-	_, err = w.Write(body)
-	if err != nil {
-		log.Panic(err)
-	}
-
 }
 
 func addFileToMultipart(filePath, fieldName, fileName string, multipartWriter *multipart.Writer) {

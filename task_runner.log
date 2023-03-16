@@ -1,5 +1,0 @@
-2023/02/18 12:55:01 Start Task Runner
-2023/02/18 12:55:01 CPU cores number is  32 MemAvailable:   30193436 kB
-2023/02/18 12:55:05 receive task: {python3 test.py 1}
-2023/02/18 12:55:05 From PID 2312927, run command {python3 test.py}
-2023/02/18 12:55:05 From PID 2312927, exited with signal: signal -1, exit code: 0

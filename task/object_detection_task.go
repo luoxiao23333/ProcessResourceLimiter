@@ -40,21 +40,26 @@ func (task *ObjectDetectionTask) BlockedRun(form *multipart.Form) (
 func writeFile(form *multipart.Form) {
 	file, err := form.File["video"][0].Open()
 	if err != nil {
-		return
+		log.Panic(err)
 	}
 	defer func(file multipart.File) {
-		err := file.Close()
+		err = file.Close()
 		if err != nil {
-
+			log.Panic(err)
 		}
 	}(file)
 
-	create, err := os.Create("input.avi")
+	create, err := os.Create("input/input.avi")
 	if err != nil {
 		log.Panic(err)
 	}
 
 	_, err = io.Copy(create, file)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	err = create.Close()
 	if err != nil {
 		log.Panic(err)
 	}
