@@ -20,7 +20,7 @@ type TaskInfo struct {
 }
 
 var schedulerURL = "http://192.168.1.101:8081"
-var resourceLimiterPort = ":8080"
+var resourceLimiterPort = ":8082"
 
 var zipPath = "temp.zip"
 
@@ -66,20 +66,16 @@ func startTask(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("receive task: %v, id: %v", taskName, taskID)
 
-	if taskName == "object_detection" {
+	if taskName == "slam" {
 		go func() {
 			// Complete object detection
-			obTask := task.NewObjectDetectionTask()
-			imgRoad, info := obTask.BlockedRun(form)
+			slamTask := task.NewSlamTask()
+			outputRoad, info := slamTask.BlockedRun(form)
 
 			body := &bytes.Buffer{}
 			multipartWriter := multipart.NewWriter(body)
-			addFileToMultipart(imgRoad+"/output.mp4",
-				"video", "output.mp4", multipartWriter)
-			addFileToMultipart(imgRoad+"/output.txt",
-				"bbox_txt", "output.txt", multipartWriter)
-			addFileToMultipart(imgRoad+"/output.xlsx",
-				"bbox_xlsx", "output.xlsx", multipartWriter)
+			addFileToMultipart(outputRoad+"/KeyFrameTrajectory.txt",
+				"key_frames", "KeyFrameTrajectory.txt", multipartWriter)
 
 			err = multipartWriter.WriteField("container_output", info)
 			if err != nil {
@@ -96,7 +92,7 @@ func startTask(w http.ResponseWriter, r *http.Request) {
 				log.Panic(err)
 			}
 
-			_, err = http.Post(schedulerURL + "/object_detection_finish", multipartWriter.FormDataContentType(), body)
+			_, err = http.Post(schedulerURL+"/slam_finish", multipartWriter.FormDataContentType(), body)
 			if err != nil {
 				log.Panic(err)
 			}
