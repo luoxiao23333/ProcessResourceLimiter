@@ -2,6 +2,7 @@ package scheduler_comm
 
 import (
 	"bytes"
+	"github.com/luoxiao23333/ProcessResourceLimiter/config"
 	"github.com/luoxiao23333/ProcessResourceLimiter/task"
 	"io"
 	"log"
@@ -20,35 +21,40 @@ type TaskInfo struct {
 }
 
 var schedulerURL = "http://192.168.1.101:8081"
-var resourceLimiterPort = ":8082"
-
-var zipPath = "temp.zip"
-
-var waitingTrackingImages chan bool
 
 func RunHttpServer() {
-	registerToScheduler()
+	port := registerToScheduler()
 
 	http.HandleFunc("/run_task", startTask)
 
-	err := http.ListenAndServe(resourceLimiterPort, nil)
+	err := http.ListenAndServe(port, nil)
 	if err != nil {
 		log.Panic(err)
 	}
 }
 
 // registerToScheduler register this worker node to the scheduler
-func registerToScheduler() {
-	_, err := http.DefaultClient.Post(schedulerURL+"/worker_register", "application/json",
-		bytes.NewBuffer([]byte("Node Register Request")))
+func registerToScheduler() string {
+	taskName := config.GetConfig().TaskName
+	resp, err := http.DefaultClient.Post(schedulerURL+"/worker_register", "text/plain",
+		bytes.NewBuffer([]byte(taskName)))
 	if err != nil {
 		log.Panic(err)
 	}
+
+	buffer := &bytes.Buffer{}
+	if _, err = io.Copy(buffer, resp.Body); err != nil {
+		log.Panic(err)
+	}
+
+	port := ":" + buffer.String()
+
+	log.Printf("Register to the Scheduler successfully! Assigned port: %v", port)
+	return port
 }
 
 // startTask match "/run_task"
 // start a task by a command from the scheduler
-// TODO update Get to Post with json struct
 func startTask(w http.ResponseWriter, r *http.Request) {
 	// Parse http query and command
 	reader, err := r.MultipartReader()
@@ -66,44 +72,13 @@ func startTask(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("receive task: %v, id: %v", taskName, taskID)
 
-	if taskName == "slam" {
-		go func() {
-			// Complete object detection
-			slamTask := task.NewSlamTask()
-			outputRoad, info := slamTask.BlockedRun(form)
+	handler := GetHandler(taskName)
 
-			body := &bytes.Buffer{}
-			multipartWriter := multipart.NewWriter(body)
-			addFileToMultipart(outputRoad+"/KeyFrameTrajectory.txt",
-				"key_frames", "KeyFrameTrajectory.txt", multipartWriter)
+	go handler(form, taskID)
 
-			err = multipartWriter.WriteField("container_output", info)
-			if err != nil {
-				log.Panic(err)
-			}
-
-			err = multipartWriter.WriteField("task_id", taskID)
-			if err != nil {
-				log.Panic(err)
-			}
-
-			err = multipartWriter.Close()
-			if err != nil {
-				log.Panic(err)
-			}
-
-			_, err = http.Post(schedulerURL+"/slam_finish", multipartWriter.FormDataContentType(), body)
-			if err != nil {
-				log.Panic(err)
-			}
-
-		}()
-	} else {
-		_, err = w.Write([]byte("Unsupported Task"))
-		if err != nil {
-			log.Panic(err)
-		}
-		log.Panic("Unsupported Task")
+	_, err = w.Write([]byte("Task Received!"))
+	if err != nil {
+		log.Panic(err)
 	}
 }
 

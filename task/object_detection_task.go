@@ -13,18 +13,18 @@ var (
 	objectDetectionImagesRoad = "output/"
 )
 
-type ObjectDetectionTask struct {
+type MCMOTTask struct {
 	*CMDTask
 }
 
-func NewObjectDetectionTask() *ObjectDetectionTask {
-	task := &ObjectDetectionTask{
+func NewMCMOTTask() *MCMOTTask {
+	task := &MCMOTTask{
 		CMDTask: NewCMDTask(objectDetectionCMD),
 	}
 	return task
 }
 
-func (task *ObjectDetectionTask) BlockedRun(form *multipart.Form) (
+func (task *MCMOTTask) BlockedRun(form *multipart.Form) (
 	imageRoad, objectDetectionInfo string) {
 	writeFile(form)
 	exitChan := task.CMDTask.Run(objectDetectionArgs...)
