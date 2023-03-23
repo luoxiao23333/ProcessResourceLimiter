@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"strings"
 )
 
 // TaskInfo
@@ -36,18 +37,29 @@ func RunHttpServer() {
 // registerToScheduler register this worker node to the scheduler
 func registerToScheduler() string {
 	taskName := config.GetConfig().TaskName
-	resp, err := http.DefaultClient.Post(schedulerURL+"/worker_register", "text/plain",
+	_, err := http.DefaultClient.Post(schedulerURL+"/worker_register", "text/plain",
 		bytes.NewBuffer([]byte(taskName)))
 	if err != nil {
 		log.Panic(err)
 	}
 
-	buffer := &bytes.Buffer{}
-	if _, err = io.Copy(buffer, resp.Body); err != nil {
+	// Get the pod name
+	resp, err := http.Get("http://metadata/self/pod/name")
+	if err != nil {
 		log.Panic(err)
 	}
+	defer func(Body io.ReadCloser) {
+		err = Body.Close()
+		if err != nil {
+			log.Panic(err)
+		}
+	}(resp.Body)
+	podName, err := io.ReadAll(resp.Body)
+	if err != nil {
+		panic(err.Error())
+	}
 
-	port := ":" + buffer.String()
+	port := strings.Split(string(podName), "_")[1]
 
 	log.Printf("Register to the Scheduler successfully! Assigned port: %v", port)
 	return port
