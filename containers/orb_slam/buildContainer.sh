@@ -2,4 +2,4 @@
     --frontend=dockerfile.v0 \
     --local context=. \
     --local dockerfile=. \
-    --output type=image,name=task_slam:v0
+    --output type=image,name=docker.io/luoxiao23333/task_slam:v0
