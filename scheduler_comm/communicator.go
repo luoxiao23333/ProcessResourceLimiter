@@ -9,7 +9,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
-	"strings"
 )
 
 // TaskInfo
@@ -43,23 +42,8 @@ func registerToScheduler() string {
 		log.Panic(err)
 	}
 
-	// Get the pod name
-	resp, err := http.Get("http://metadata/self/pod/name")
-	if err != nil {
-		log.Panic(err)
-	}
-	defer func(Body io.ReadCloser) {
-		err = Body.Close()
-		if err != nil {
-			log.Panic(err)
-		}
-	}(resp.Body)
-	podName, err := io.ReadAll(resp.Body)
-	if err != nil {
-		panic(err.Error())
-	}
-
-	port := strings.Split(string(podName), "_")[1]
+	// Get the port
+	port := ":" + os.Getenv("port")
 
 	log.Printf("Register to the Scheduler successfully! Assigned port: %v", port)
 	return port
