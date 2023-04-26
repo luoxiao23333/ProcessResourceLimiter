@@ -2,11 +2,12 @@ package scheduler_comm
 
 import (
 	"bytes"
-	"github.com/luoxiao23333/ProcessResourceLimiter/config"
-	"github.com/luoxiao23333/ProcessResourceLimiter/task"
 	"log"
 	"mime/multipart"
 	"net/http"
+
+	"github.com/luoxiao23333/ProcessResourceLimiter/config"
+	"github.com/luoxiao23333/ProcessResourceLimiter/task"
 )
 
 type Handler func(*multipart.Form, string)
@@ -16,8 +17,9 @@ var taskRunnerMap *map[string]Handler = nil
 func GetHandler(taskName string) Handler {
 	if taskRunnerMap == nil {
 		taskRunnerMap = &map[string]Handler{
-			"slam":  doSlam,
-			"mcmot": doMCMOT,
+			"slam":   doSlam,
+			"mcmot":  doMCMOT,
+			"fusion": doFusion,
 		}
 	}
 
@@ -27,6 +29,7 @@ func GetHandler(taskName string) Handler {
 
 	handler, ok := (*taskRunnerMap)[taskName]
 	if !ok {
+		log.Printf("only support %v", taskRunnerMap)
 		log.Panicf("Task name %v is not support!", taskName)
 	}
 
@@ -97,4 +100,48 @@ func doMCMOT(form *multipart.Form, taskID string) {
 	if err != nil {
 		log.Panic(err)
 	}
+}
+
+func doFusion(form *multipart.Form, taskID string) {
+	fusionTask := task.GetFusionTask()
+
+	if form.Value["reset"][0] == "True" {
+		log.Println("Reset")
+		fusionTask.ResetSLAM()
+		return
+	}
+
+	fusionTask.WriteFusionInputFile(form)
+	log.Printf("Receive Detect Result: %v", form.Value["detect_result"][0])
+
+	fusionTask.InputChan <- form.Value["detect_result"][0]
+	fusionResult := <-fusionTask.OutputChan
+
+	log.Printf("Get fusion Result: %v", fusionResult)
+
+	body := new(bytes.Buffer)
+	multipartWriter := multipart.NewWriter(body)
+
+	err := multipartWriter.WriteField("fusion_result", fusionResult)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	log.Printf("Write Fusion Result")
+
+	err = multipartWriter.WriteField("task_id", taskID)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	err = multipartWriter.Close()
+	if err != nil {
+		log.Panic(err)
+	}
+
+	_, err = http.Post(schedulerURL+"/fusion_finish", multipartWriter.FormDataContentType(), body)
+	if err != nil {
+		log.Panic(err)
+	}
+	log.Println("Result has been sent back")
 }

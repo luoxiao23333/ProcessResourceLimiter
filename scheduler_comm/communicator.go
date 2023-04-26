@@ -2,13 +2,14 @@ package scheduler_comm
 
 import (
 	"bytes"
-	"github.com/luoxiao23333/ProcessResourceLimiter/config"
-	"github.com/luoxiao23333/ProcessResourceLimiter/task"
 	"io"
 	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
+
+	"github.com/luoxiao23333/ProcessResourceLimiter/config"
+	"github.com/luoxiao23333/ProcessResourceLimiter/task"
 )
 
 // TaskInfo
@@ -58,15 +59,16 @@ func startTask(w http.ResponseWriter, r *http.Request) {
 		log.Panic(err)
 	}
 
-	form, err := reader.ReadForm(1024 * 1024 * 100)
+	form, err := reader.ReadForm(1024 * 1024 * 15)
 	if err != nil {
 		log.Panic(err)
 	}
 
+	log.Printf("task_name: %v, task_id: %v",
+		len(form.Value["task_name"]), len(form.Value["task_id"]))
+
 	taskName := form.Value["task_name"][0]
 	taskID := form.Value["task_id"][0]
-
-	log.Printf("receive task: %v, id: %v", taskName, taskID)
 
 	handler := GetHandler(taskName)
 
@@ -84,6 +86,9 @@ func addFileToMultipart(filePath, fieldName, fileName string, multipartWriter *m
 		log.Panic(err)
 	}
 	writer, err := multipartWriter.CreateFormFile(fieldName, fileName)
+	if err != nil {
+		log.Panic(err)
+	}
 	_, err = io.Copy(writer, file)
 	if err != nil {
 		log.Panic(err)

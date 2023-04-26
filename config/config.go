@@ -14,7 +14,7 @@ var config *Config = nil
 
 func GetConfig() *Config {
 	if config == nil {
-		configFile, err := os.ReadFile("task_runner_config.yaml")
+		configFile, err := os.ReadFile("/task_runner_config.yaml")
 		if err != nil {
 			log.Panic(err)
 		}

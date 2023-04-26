@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"github.com/luoxiao23333/ProcessResourceLimiter/config"
 	"github.com/luoxiao23333/ProcessResourceLimiter/scheduler_comm"
+	"github.com/luoxiao23333/ProcessResourceLimiter/task"
 	"log"
 	"os"
 	"os/exec"
@@ -54,4 +56,11 @@ func initLog() {
 		panic(err)
 	}
 	log.SetOutput(logFile)
+
+	log.Printf("Start %v task", config.GetConfig().TaskName)
+
+	if config.GetConfig().TaskName == "fusion" {
+		log.Println("Start fusion task forever")
+		task.GetFusionTask()
+	}
 }
