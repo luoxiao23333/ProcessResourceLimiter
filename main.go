@@ -2,14 +2,15 @@ package main
 
 import (
 	"bytes"
-	"github.com/luoxiao23333/ProcessResourceLimiter/config"
-	"github.com/luoxiao23333/ProcessResourceLimiter/scheduler_comm"
-	"github.com/luoxiao23333/ProcessResourceLimiter/task"
 	"log"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
+
+	"github.com/luoxiao23333/ProcessResourceLimiter/config"
+	"github.com/luoxiao23333/ProcessResourceLimiter/scheduler_comm"
+	"github.com/luoxiao23333/ProcessResourceLimiter/task"
 )
 
 const (
@@ -59,8 +60,12 @@ func initLog() {
 
 	log.Printf("Start %v task", config.GetConfig().TaskName)
 
-	if config.GetConfig().TaskName == "fusion" {
+	taskName := config.GetConfig().TaskName
+	if taskName == "fusion" {
 		log.Println("Start fusion task forever")
 		task.GetFusionTask()
+	} else if taskName == "det" {
+		log.Println("Start det task forever")
+		task.GetDetTask()
 	}
 }

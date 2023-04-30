@@ -20,6 +20,7 @@ func GetHandler(taskName string) Handler {
 			"slam":   doSlam,
 			"mcmot":  doMCMOT,
 			"fusion": doFusion,
+			"det":    doDET,
 		}
 	}
 
@@ -140,6 +141,48 @@ func doFusion(form *multipart.Form, taskID string) {
 	}
 
 	_, err = http.Post(schedulerURL+"/fusion_finish", multipartWriter.FormDataContentType(), body)
+	if err != nil {
+		log.Panic(err)
+	}
+	log.Println("Result has been sent back")
+}
+
+func doDET(form *multipart.Form, taskID string) {
+	detTask := task.GetDetTask()
+
+	if form.Value["reset"][0] == "True" {
+		log.Println("Reset")
+		detTask.ResetModel()
+		return
+	}
+
+	detTask.DoDET(form)
+
+	detResult := <-detTask.OutputChan
+
+	log.Printf("Get DET Result: %v", detResult)
+
+	body := new(bytes.Buffer)
+	multipartWriter := multipart.NewWriter(body)
+
+	err := multipartWriter.WriteField("det_result", detResult)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	log.Printf("Write DET Result")
+
+	err = multipartWriter.WriteField("task_id", taskID)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	err = multipartWriter.Close()
+	if err != nil {
+		log.Panic(err)
+	}
+
+	_, err = http.Post(schedulerURL+"/det_finish", multipartWriter.FormDataContentType(), body)
 	if err != nil {
 		log.Panic(err)
 	}
