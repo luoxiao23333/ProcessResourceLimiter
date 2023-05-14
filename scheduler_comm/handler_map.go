@@ -112,39 +112,50 @@ func doFusion(form *multipart.Form, taskID string) {
 		return
 	}
 
-	fusionTask.WriteFusionInputFile(form)
-	log.Printf("Receive Detect Result: %v", form.Value["detect_result"][0])
-
-	fusionTask.InputChan <- form.Value["detect_result"][0]
-	fusionResult := <-fusionTask.OutputChan
-
-	log.Printf("Get fusion Result: %v", fusionResult)
-
-	body := new(bytes.Buffer)
-	multipartWriter := multipart.NewWriter(body)
-
-	err := multipartWriter.WriteField("fusion_result", fusionResult)
-	if err != nil {
-		log.Panic(err)
+	if len(form.Value["cmd"]) != 1 {
+		log.Panicf("len of cmd is %v, expected %v", len(form.Value["cmd"]))
 	}
 
-	log.Printf("Write Fusion Result")
+	cmd := form.Value["cmd"][0]
 
-	err = multipartWriter.WriteField("task_id", taskID)
-	if err != nil {
-		log.Panic(err)
-	}
+	if cmd == "slam" {
+		log.Printf("Receive slam trigger, start slam")
+		fusionTask.Localize(form)
+	} else if cmd == "fusion" {
+		detResult := fusionTask.FormattedDETResult(form.Value["detect_result"][0])
+		log.Printf("Receive and format det result : [%v]", detResult)
+		// wait for slam cmd is sent
+		<-fusionTask.LocalizeChan
+		fusionTask.InputChan <- detResult
+		fusionResult := <-fusionTask.OutputChan
+		log.Printf("Get fusion Result: %v", fusionResult)
 
-	err = multipartWriter.Close()
-	if err != nil {
-		log.Panic(err)
-	}
+		body := new(bytes.Buffer)
+		multipartWriter := multipart.NewWriter(body)
 
-	_, err = http.Post(schedulerURL+"/fusion_finish", multipartWriter.FormDataContentType(), body)
-	if err != nil {
-		log.Panic(err)
+		err := multipartWriter.WriteField("fusion_result", fusionResult)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		log.Printf("Write Fusion Result")
+
+		err = multipartWriter.WriteField("task_id", taskID)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		err = multipartWriter.Close()
+		if err != nil {
+			log.Panic(err)
+		}
+
+		_, err = http.Post(schedulerURL+"/fusion_finish", multipartWriter.FormDataContentType(), body)
+		if err != nil {
+			log.Panic(err)
+		}
+		log.Println("Result has been sent back")
 	}
-	log.Println("Result has been sent back")
 }
 
 func doDET(form *multipart.Form, taskID string) {

@@ -115,5 +115,5 @@ func (task *DETTask) DoDET(form *multipart.Form) {
 
 	log.Println(" Write file ", "input.png")
 
-	task.InputChan <- detRoad
+	task.InputChan <- detRoad + "\n"
 }

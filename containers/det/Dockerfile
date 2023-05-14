@@ -4,7 +4,7 @@
 FROM docker.io/luoxiao23333/mcmot:v1
 
 ADD ProcessResourceLimiter /workspace/ProcessResourceLimiter
-ADD task_runner_config.yaml task_runner_config.yaml
+ADD task_runner_config.yaml /
 
 RUN chmod +x /workspace/ProcessResourceLimiter
 

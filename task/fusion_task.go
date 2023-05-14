@@ -5,6 +5,7 @@ import (
 	"log"
 	"mime/multipart"
 	"os"
+	"strings"
 	"sync"
 )
 
@@ -26,14 +27,16 @@ var (
 
 type FusionTask struct {
 	*CMDTask
-	InputChan  chan string
-	OutputChan chan string
+	InputChan    chan string
+	OutputChan   chan string
+	LocalizeChan chan bool
 }
 
 func newFusionTask() *FusionTask {
 	task := &FusionTask{
-		CMDTask:   NewCMDTask(fusionCMD),
-		InputChan: make(chan string),
+		CMDTask:      NewCMDTask(fusionCMD),
+		InputChan:    make(chan string),
+		LocalizeChan: make(chan bool, 1),
 	}
 	return task
 }
@@ -49,7 +52,7 @@ func GetFusionTask() *FusionTask {
 }
 
 func (task *FusionTask) ResetSLAM() {
-	task.InputChan <- "-2\n"
+	task.InputChan <- "Reset\n"
 	log.Println("Reset!")
 }
 
@@ -115,4 +118,18 @@ func (task *FusionTask) WriteFusionInputFile(form *multipart.Form) {
 	}
 
 	log.Println(" Write file ", "input.png")
+}
+
+func (task *FusionTask) Localize(form *multipart.Form) {
+	task.WriteFusionInputFile(form)
+	fusionTask.InputChan <- "Localize\n"
+	task.LocalizeChan <- true
+}
+
+func (task *FusionTask) FormattedDETResult(detResult string) string {
+	if strings.Contains(detResult, "NULL") {
+		return "-1\n"
+	}
+	detResult = strings.ReplaceAll(detResult, ",", " ")
+	return detResult + "-1\n"
 }
