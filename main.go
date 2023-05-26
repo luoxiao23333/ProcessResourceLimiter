@@ -67,5 +67,8 @@ func initLog() {
 	} else if taskName == "det" {
 		log.Println("Start det task forever")
 		task.GetDetTask()
+	} else if taskName == "slam" {
+		log.Println("Start slam task forever")
+		task.GetSlamTask()
 	}
 }

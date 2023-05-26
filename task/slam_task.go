@@ -5,40 +5,86 @@ import (
 	"log"
 	"mime/multipart"
 	"os"
+	"sync"
 )
 
 var (
-	slamCMD  = "bash"
-	slamArgs = []string{"/ORB_SLAM2/run.sh"}
-	slamRoad = ""
+	slamCMD  = "/ORB_SLAM2/Examples/Monocular/fusion/fusion"
+	slamArgs = []string{
+		"/ORB_SLAM2/Examples/Monocular/KITTI00-02.yaml",
+		"/ORB_SLAM2/Vocabulary/ORBvoc.txt",
+		"/ORB_SLAM2/input.png",
+	}
+	slamRoad           = "/ORB_SLAM2/input.png"
+	slamTask *SlamTask = nil
+	slamLock           = sync.Mutex{}
 )
 
 type SlamTask struct {
 	*CMDTask
+	InputChan  chan string
+	OutputChan chan string
 }
 
-func NewSlamTask() *SlamTask {
+func newSlamTask() *SlamTask {
 	task := &SlamTask{
-		CMDTask: NewCMDTask(slamCMD),
+		CMDTask:   NewCMDTask(slamCMD),
+		InputChan: make(chan string),
 	}
 	return task
 }
 
-func (task *SlamTask) BlockedRun(form *multipart.Form) (
-	outputRoad, slamInfo string) {
-	writeSlamInputFile(form)
-	exitChan := task.CMDTask.Run(slamArgs...)
-
-	select {
-	case exitInfo, _ := <-exitChan:
-		outputRoad = slamRoad
-		slamInfo = exitInfo.Output
-		return outputRoad, slamInfo
+func GetSlamTask() *SlamTask {
+	slamLock.Lock()
+	if slamTask == nil {
+		slamTask = newSlamTask()
+		slamTask.OutputChan = slamTask.nonBlockedRun(slamTask.InputChan)
 	}
+	slamLock.Unlock()
+	return slamTask
 }
 
-func writeSlamInputFile(form *multipart.Form) {
-	file, err := form.File["video"][0].Open()
+func (task *SlamTask) ResetSLAM() {
+	task.InputChan <- "Reset\n"
+	log.Println("Reset!")
+}
+
+func (task *SlamTask) GetImagePath() string {
+	return slamRoad
+}
+
+func (task *SlamTask) nonBlockedRun(inputChan chan string) chan string {
+	outputChan := make(chan string)
+
+	go func() {
+		stdOutChan := make(chan string)
+		task.CMDTask.RunWithStd(inputChan, stdOutChan, slamArgs...)
+		for {
+			slamResults := ""
+			for {
+				line := <-stdOutChan + "\n"
+
+				if line == "NULL\n" {
+					outputChan <- "NULL\n"
+					break
+				}
+
+				if line == "-1\n" {
+					outputChan <- slamResults
+					break
+				}
+
+				slamResults = slamResults + line
+				log.Println("Receive new line: " + line)
+			}
+		}
+	}()
+
+	return outputChan
+}
+
+func (task *SlamTask) WriteSlamInputFile(form *multipart.Form) {
+	file, err := form.File["frame"][0].Open()
 	if err != nil {
 		log.Panic(err)
 	}
@@ -49,7 +95,7 @@ func writeSlamInputFile(form *multipart.Form) {
 		}
 	}(file)
 
-	create, err := os.Create("/ORB_SLAM2/input.mp4")
+	create, err := os.OpenFile(slamRoad, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -64,5 +110,10 @@ func writeSlamInputFile(form *multipart.Form) {
 		log.Panic(err)
 	}
 
-	log.Println(" Write file ", "input.mp4")
+	log.Println(" Write file ", "input.png")
+}
+
+func (task *SlamTask) Localize(form *multipart.Form) {
+	task.WriteSlamInputFile(form)
+	slamTask.InputChan <- "Localize\n"
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 // 1. start slam
@@ -27,9 +28,10 @@ var (
 
 type FusionTask struct {
 	*CMDTask
-	InputChan    chan string
-	OutputChan   chan string
-	LocalizeChan chan bool
+	InputChan           chan string
+	OutputChan          chan string
+	LocalizeChan        chan bool
+	LocalizationLatency time.Duration
 }
 
 func newFusionTask() *FusionTask {
@@ -70,6 +72,11 @@ func (task *FusionTask) nonBlockedRun(inputChan chan string) chan string {
 			fusionResults := ""
 			for {
 				line := <-stdOutChan + "\n"
+
+				if line == "Done\n" {
+					outputChan <- "Done\n"
+					break
+				}
 
 				if line == "NULL\n" {
 					outputChan <- "NULL\n"
@@ -121,9 +128,11 @@ func (task *FusionTask) WriteFusionInputFile(form *multipart.Form) {
 }
 
 func (task *FusionTask) Localize(form *multipart.Form) {
-	task.WriteFusionInputFile(form)
+	now := time.Now()
 	fusionTask.InputChan <- "Localize\n"
+	<-fusionTask.OutputChan
 	task.LocalizeChan <- true
+	task.LocalizationLatency = time.Since(now)
 }
 
 func (task *FusionTask) FormattedDETResult(detResult string) string {

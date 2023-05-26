@@ -5,6 +5,7 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
+	"time"
 
 	"github.com/luoxiao23333/ProcessResourceLimiter/config"
 	"github.com/luoxiao23333/ProcessResourceLimiter/task"
@@ -38,15 +39,24 @@ func GetHandler(taskName string) Handler {
 }
 
 func doSlam(form *multipart.Form, taskID string) {
-	slamTask := task.NewSlamTask()
-	outputRoad, info := slamTask.BlockedRun(form)
+	slamTask := task.GetSlamTask()
 
 	body := &bytes.Buffer{}
 	multipartWriter := multipart.NewWriter(body)
-	addFileToMultipart(outputRoad+"/KeyFrameTrajectory.txt",
-		"key_frames", "KeyFrameTrajectory.txt", multipartWriter)
 
-	err := multipartWriter.WriteField("container_output", info)
+	if form.Value["reset"][0] == "True" {
+		log.Println("Reset")
+		slamTask.ResetSLAM()
+		return
+	}
+
+	log.Printf("Receive slam trigger, start slam")
+	slamTask.Localize(form)
+
+	slamResult := <-slamTask.OutputChan
+	log.Printf("Get fusion Result: %v", slamResult)
+
+	err := multipartWriter.WriteField("slam_result", slamResult)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -66,6 +76,7 @@ func doSlam(form *multipart.Form, taskID string) {
 		log.Panic(err)
 	}
 
+	log.Println("Slam Task has been send back")
 }
 
 func doMCMOT(form *multipart.Form, taskID string) {
@@ -120,41 +131,58 @@ func doFusion(form *multipart.Form, taskID string) {
 
 	if cmd == "slam" {
 		log.Printf("Receive slam trigger, start slam")
-		fusionTask.Localize(form)
+		fusionTask.WriteFusionInputFile(form)
+		go fusionTask.Localize(form)
 	} else if cmd == "fusion" {
 		detResult := fusionTask.FormattedDETResult(form.Value["detect_result"][0])
 		log.Printf("Receive and format det result : [%v]", detResult)
-		// wait for slam cmd is sent
+		// wait for slam is done
 		<-fusionTask.LocalizeChan
+		fusionTick := time.Now()
 		fusionTask.InputChan <- detResult
 		fusionResult := <-fusionTask.OutputChan
+		fusionLatency := time.Since(fusionTick)
 		log.Printf("Get fusion Result: %v", fusionResult)
 
-		body := new(bytes.Buffer)
-		multipartWriter := multipart.NewWriter(body)
+		// Write result in a thread avoid deadlock
+		go func() {
+			body := new(bytes.Buffer)
+			multipartWriter := multipart.NewWriter(body)
 
-		err := multipartWriter.WriteField("fusion_result", fusionResult)
-		if err != nil {
-			log.Panic(err)
-		}
+			err := multipartWriter.WriteField("fusion_result", fusionResult)
+			if err != nil {
+				log.Panic(err)
+			}
 
-		log.Printf("Write Fusion Result")
+			log.Printf("Write Fusion Result")
 
-		err = multipartWriter.WriteField("task_id", taskID)
-		if err != nil {
-			log.Panic(err)
-		}
+			err = multipartWriter.WriteField("task_id", taskID)
+			if err != nil {
+				log.Panic(err)
+			}
 
-		err = multipartWriter.Close()
-		if err != nil {
-			log.Panic(err)
-		}
+			err = multipartWriter.WriteField("slam_latency", fusionTask.LocalizationLatency.String())
+			if err != nil {
+				log.Panic(err)
+			}
 
-		_, err = http.Post(schedulerURL+"/fusion_finish", multipartWriter.FormDataContentType(), body)
-		if err != nil {
-			log.Panic(err)
-		}
-		log.Println("Result has been sent back")
+			err = multipartWriter.WriteField("fusion_latency", fusionLatency.String())
+			if err != nil {
+				log.Panic(err)
+			}
+
+			err = multipartWriter.Close()
+			if err != nil {
+				log.Panic(err)
+			}
+
+			_, err = http.Post(schedulerURL+"/fusion_finish", multipartWriter.FormDataContentType(), body)
+			if err != nil {
+				log.Panic(err)
+			}
+			log.Println("Result has been sent back")
+		}()
+
 	}
 }
 
@@ -168,34 +196,43 @@ func doDET(form *multipart.Form, taskID string) {
 	}
 
 	detTask.DoDET(form)
+	go func() {
+		now := time.Now()
+		detResult := <-detTask.OutputChan
+		detLatency := time.Since(now)
 
-	detResult := <-detTask.OutputChan
+		log.Printf("Get DET Result: %v", detResult)
 
-	log.Printf("Get DET Result: %v", detResult)
+		body := new(bytes.Buffer)
+		multipartWriter := multipart.NewWriter(body)
 
-	body := new(bytes.Buffer)
-	multipartWriter := multipart.NewWriter(body)
+		err := multipartWriter.WriteField("det_result", detResult)
+		if err != nil {
+			log.Panic(err)
+		}
 
-	err := multipartWriter.WriteField("det_result", detResult)
-	if err != nil {
-		log.Panic(err)
-	}
+		log.Printf("Write DET Result")
 
-	log.Printf("Write DET Result")
+		err = multipartWriter.WriteField("task_id", taskID)
+		if err != nil {
+			log.Panic(err)
+		}
 
-	err = multipartWriter.WriteField("task_id", taskID)
-	if err != nil {
-		log.Panic(err)
-	}
+		err = multipartWriter.WriteField("det_latency", detLatency.String())
+		if err != nil {
+			log.Panic(err)
+		}
 
-	err = multipartWriter.Close()
-	if err != nil {
-		log.Panic(err)
-	}
+		err = multipartWriter.Close()
+		if err != nil {
+			log.Panic(err)
+		}
 
-	_, err = http.Post(schedulerURL+"/det_finish", multipartWriter.FormDataContentType(), body)
-	if err != nil {
-		log.Panic(err)
-	}
-	log.Println("Result has been sent back")
+		_, err = http.Post(schedulerURL+"/det_finish", multipartWriter.FormDataContentType(), body)
+		if err != nil {
+			log.Panic(err)
+		}
+		log.Println("Result has been sent back")
+	}()
+
 }

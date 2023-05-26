@@ -59,7 +59,7 @@ func startTask(w http.ResponseWriter, r *http.Request) {
 		log.Panic(err)
 	}
 
-	form, err := reader.ReadForm(1024 * 1024 * 15)
+	form, err := reader.ReadForm(1024 * 1024 * 2)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -72,7 +72,7 @@ func startTask(w http.ResponseWriter, r *http.Request) {
 
 	handler := GetHandler(taskName)
 
-	go handler(form, taskID)
+	handler(form, taskID)
 
 	_, err = w.Write([]byte("Task Received!"))
 	if err != nil {
