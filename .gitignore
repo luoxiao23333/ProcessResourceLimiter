@@ -1,5 +1,4 @@
 .idea/
-containers/complete_fusion
-ORB_SLAM2/
-Pangolin/
-opencv3/
+**ORB_SLAM2/
+**Pangolin/
+**opencv3/
